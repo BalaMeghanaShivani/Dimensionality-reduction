@@ -1,0 +1,150 @@
+---
+title: "Final Project"
+author: "BALA MEGHANA SHIVANI SRIPATHI PANDITHARADHYULA"
+date: "04-12-2024"
+format: 
+  html:
+    embed-resources: true
+    code-tools: true
+    code-summary: "Code"
+---
+
+
+#Download required packages
+```{r}
+library(readr)
+library(dplyr)
+library(dimRed)
+library(Rtsne)
+library(RANN)
+library(MASS)
+library(ggplot2)
+```
+
+#Loading Dataset
+```{r}
+kidney_data <- read_csv("~/Desktop/Classes/MATH 250/kidney_disease.csv")
+head(kidney_data)
+kidney_data_int <- as.data.frame(lapply(kidney_data, function(x) {
+  if (!is.numeric(x)) as.integer(as.factor(x)) else x
+}))
+
+# Handle missing values if needed
+kidney_data_int <- na.omit(kidney_data_int)
+head(kidney_data_int)
+```
+
+
+#Data Preprocessing
+```{r}
+str(kidney_data_int)
+
+# Convert specific columns to numeric if needed
+numeric_cols <- c("age", "bp", "sg", "al", "su")
+kidney_data_int[numeric_cols] <- lapply(kidney_data_int[numeric_cols], as.numeric)
+
+str(kidney_data_int)
+
+col_means <- colMeans(kidney_data_int[numeric_cols], na.rm = TRUE)
+print(col_means)
+```
+
+
+#Factor Analysis 1 Factor
+```{r}
+factor_result <- factanal(kidney_data_int, factors = 1, scores = "Bartlett")
+factor_result
+```
+Albumin (al) and Hemoglobin (hemo) have low uniqueness values of 0.152 and 0.238,respectively, indicating that these variables are substantially explained by the extracted factor.
+Potassium (pot) and White Cell Count (wc) have high uniqueness values of 0.966 and 0.954, showing that most of their variances are not captured by the extracted factor.
+Variables such as Albumin (al) with a loading of 0.921, and Hypertension (htn) with a loading of 0.875, show strong positive relationships with the factor.
+Specific Gravity (sg) and Red Cell Count (rc) have loadings of -0.799 and -0.802 respectively, suggesting a strong negative association with the factor.
+The single factor explains 46.2% of the variance across the variables, indicating significant butincomplete capture of the dataset’s variability. The chi-square test statistic of 1058.49 suggests that one factor is insufficient to explain all variances, indicating the need for considering additional factors
+The factor might represent a composite indicator of kidney disease severity, which helps in understanding the disease progression in CKD
+
+
+
+#PCA
+```{r}
+
+# Map numeric to character labels for classification
+kidney_data_int$classification <- factor(kidney_data_int$classification, levels = c(1, 2), labels = c("ckd", "notCKD"))
+
+# Perform PCA on the subsetted data
+kidney_data_sub <- subset(kidney_data_int, select = -c(classification))  
+pca <- prcomp(kidney_data_sub, scale. = TRUE)
+summary(pca)
+pca$rotation[, 1:3]
+
+# Plotting the loadings of the first two principal components
+library(ggplot2)
+ggplot(as.data.frame(pca$rotation), aes(x = PC1, y = PC2, color = rownames(pca$rotation))) +
+  geom_point() +
+  labs(title = "Scatter Plot of First Two Principal Components Loadings",
+       x = "First Principal Component (PC1)",
+       y = "Second Principal Component (PC2)",
+       color = "Features") +
+  theme_minimal()  # Use a minimal theme for the plot
+
+# Prepare data frame for plotting PCA data points
+pca_df <- as.data.frame(pca$x)
+pca_df$classification <- kidney_data_int$classification[match(rownames(pca_df), rownames(kidney_data_int))]
+
+# Plotting the first two principal components with points colored by the 'Class' variable (now using "ckd" and "notCKD" labels)
+ggplot(pca_df, aes(x = PC1, y = PC2, color = classification)) +
+  geom_point() +
+  labs(title = "Scatter Plot of First Two Principal Components (Data Points)",
+       x = "First Principal Component (PC1)",
+       y = "Second Principal Component (PC2)",
+       color = "Class Scale") +
+  theme_minimal()  # Use a minimal theme for the plot
+```
+PC1 captures 48.04% of the variance, emphasizing its significance in representing the dataset’s features. PC2 captures much less at 7.235%, and the contribution continues to decrease for
+additional components.
+Variables such as hemoglobin (‘hemo‘), packed cell volume (‘pcv‘), and red blood cell count (‘rc‘) exhibit high positive loadings on PC1. This indicates that these
+variables, which are essential markers of blood health and oxygen transport efficiency, significantly influence this principal component.
+variables such as serum creatinine (‘sc‘), blood glucose random (‘bgr‘),hypertension (‘htn‘), and diabetes mellitus (‘dm‘) demonstrate a negative correlation with PC1.
+Variables such as red blood cells (‘rbc‘), blood urea (‘bu‘), anemia (‘ane‘), and pedal edema (‘pe‘) exhibit high positive loadings on PC2. 
+Conversely, variables such as sugar (‘su‘), blood glucose random (‘bgr‘), and coronary artery disease (‘cad‘) show negative correlations with PC2.
+ PC1 may inversely correlate with disease severity, where a decrease in PC1 could signal worsening health conditions.
+ PC2 might reflect a dimension where metabolic control and cardiovascular health
+
+#LDA
+```{r}
+kidney_data_int <- as.data.frame(lapply(kidney_data, function(x) {
+  if (!is.numeric(x)) as.integer(as.factor(x)) else x
+}))
+
+# Handle missing values if needed
+kidney_data_int <- na.omit(kidney_data_int)
+# Convert classification to a factor with descriptive labels
+kidney_data_int$classification <- factor(kidney_data_int$classification, levels = c(1, 2), labels = c("ckd", "notCKD"))
+
+# Perform PCA
+pca <- prcomp(kidney_data_int[, -which(names(kidney_data_int) == "classification")], scale. = TRUE)
+
+# Prepare data for plotting
+plot_dat <- data.frame(
+  LDA1 = pca$x[, 1],  # Using LDA1 to label PC1
+  LDA2 = pca$x[, 2],  # Using LDA2 to label PC2
+  label = as.factor(kidney_data_int$classification)  # Ensure label is now "ckd", "notCKD"
+)
+
+# Use ggplot2 to create the scatter plot
+library(ggplot2)
+ggplot(plot_dat, aes(x = LDA1, y = LDA2, color = label)) +
+  geom_point(alpha = .75, size = 2) +
+  theme_minimal() +
+  ggtitle("LDA using PC1 and PC2 as features") +  # Ensure the title reflects the plot context
+  theme(aspect.ratio = 1,
+        panel.grid.major = element_blank(),   # Remove major grid lines
+        panel.grid.minor = element_blank(),   # Remove minor grid lines
+        axis.text = element_text(size = 12),  # Ensure axis text is visible and legible
+        axis.title = element_text(size = 14), # Ensure axis titles are visible and appropriately sized
+        axis.line = element_line(colour = "black"))  # Add black axis lines
+
+
+```
+ The plot shows two distinct groups represented by different colors  ckd and notckd. This indicates that using PC1 and PC2 as features allows LDA to effectively discriminate between the two classes.
+LDA1 seems to be the axis with the most separation between the classes, suggesting that the variance between classes is mostly along this direction.
+ The 'notckd' class forms a tight cluster compared to the red class, which is more spread out. This could imply that the 'notckd' class is more homogenous regarding the underlying PCA features, or it could reflect differences in the sample size or variance between groups.
